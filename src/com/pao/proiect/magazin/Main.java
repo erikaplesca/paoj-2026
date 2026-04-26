@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 
 public class Main {
 
@@ -52,6 +53,8 @@ public class Main {
         actiunea10IstoricClient(clientService, comandaService);
 
         sectiuneBonusStocSubPrag(produsService);
+
+        runMeniu(categorieService, produsService, furnizorService, clientService, comandaService);
     }
 
     private static void afiseazaTitlu(int numar, String titlu) {
@@ -197,6 +200,266 @@ public class Main {
         System.out.println("  Comenzi pentru " + maria.getNume() + ":");
         for (Comanda c : istoric) {
             System.out.println("    - " + c);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Meniu interactiv
+    // -----------------------------------------------------------------------
+
+    private static void runMeniu(CategorieService cs, ProdusService ps,
+                                  FurnizorService fs, ClientService cls,
+                                  ComandaService oms) {
+        Scanner sc = new Scanner(System.in);
+        System.out.println("\n \n \n ");
+        System.out.println("  MENIU - Gestiune Magazin");
+
+        boolean running = true;
+        while (running) {
+            System.out.println("\n  1.  Adauga categorie");
+            System.out.println("  2.  Adauga produs");
+            System.out.println("  3.  Inregistreaza furnizor");
+            System.out.println("  4.  Inregistreaza client");
+            System.out.println("  5.  Aprovizioneaza produs");
+            System.out.println("  6.  Plaseaza comanda");
+            System.out.println("  7.  Cauta produse dupa categorie");
+            System.out.println("  8.  Cauta produs dupa cod");
+            System.out.println("  9.  Top produse vandute");
+            System.out.println("  10. Istoricul comenzilor unui client");
+            System.out.println("  0.  Iesire");
+            System.out.print("\n  Alege actiunea: ");
+
+            String linie = sc.nextLine().trim();
+            int optiune;
+            try {
+                optiune = Integer.parseInt(linie);
+            } catch (NumberFormatException e) {
+                System.out.println("  [!] Optiune invalida. Introdu un numar intre 0 si 10.");
+                continue;
+            }
+
+            System.out.println();
+            try {
+                switch (optiune) {
+                    case 1  -> meniu1AdaugaCategorie(sc, cs);
+                    case 2  -> meniu2AdaugaProdus(sc, cs, ps);
+                    case 3  -> meniu3AdaugaFurnizor(sc, fs);
+                    case 4  -> meniu4AdaugaClient(sc, cls);
+                    case 5  -> meniu5Aprovizioneaza(sc, fs, ps);
+                    case 6  -> meniu6PlaseazaComanda(sc, cls, oms);
+                    case 7  -> meniu7CautaDupaCategorie(sc, ps);
+                    case 8  -> meniu8CautaDupaCod(sc, ps);
+                    case 9  -> meniu9TopVandute(oms);
+                    case 10 -> meniu10IstoricClient(sc, cls, oms);
+                    case 0  -> { running = false; System.out.println("  La revedere!"); }
+                    default -> System.out.println("  [!] Optiune invalida.");
+                }
+            } catch (EntitateInexistentaException | StocInsuficientException ex) {
+                System.out.println("  [!] Eroare: " + ex.getMessage());
+            } catch (IllegalArgumentException | IllegalStateException ex) {
+                System.out.println("  [!] Date invalide: " + ex.getMessage());
+            }
+        }
+        sc.close();
+    }
+
+    private static void meniu1AdaugaCategorie(Scanner sc, CategorieService cs) {
+        System.out.print("  Nume categorie: ");
+        String nume = sc.nextLine().trim();
+        System.out.print("  Descriere: ");
+        String desc = sc.nextLine().trim();
+        cs.adauga(new Categorie(nume, desc));
+        System.out.println("  [OK] Categorie adaugata: " + cs.cautaDupaNume(nume));
+        System.out.println("  Toate categoriile: ");
+        for (Categorie c : cs.listeazaToate()) {
+            System.out.println("    - " + c.getNume());
+        }
+    }
+
+    private static void meniu2AdaugaProdus(Scanner sc, CategorieService cs, ProdusService ps) {
+        System.out.print("  Tip produs (1=alimentar, 2=nealimentar): ");
+        String tip = sc.nextLine().trim();
+        System.out.print("  Prefix cod (ex. ALIM, NEAL): ");
+        String prefix = sc.nextLine().trim();
+        System.out.print("  Serial cod (numar intreg pozitiv): ");
+        int serial = Integer.parseInt(sc.nextLine().trim());
+        System.out.print("  Nume produs: ");
+        String nume = sc.nextLine().trim();
+        System.out.print("  Pret (ex. 12.50): ");
+        double pret = Double.parseDouble(sc.nextLine().trim());
+        System.out.print("  Stoc initial: ");
+        int stoc = Integer.parseInt(sc.nextLine().trim());
+        System.out.print("  Categorie (nume exact): ");
+        String catNume = sc.nextLine().trim();
+        Categorie cat = cs.cautaDupaNume(catNume);
+        CodProdus cod = new CodProdus(prefix, serial);
+        Produs p;
+        if ("1".equals(tip)) {
+            System.out.print("  Data expirare (AAAA-LL-ZZ): ");
+            LocalDate exp = LocalDate.parse(sc.nextLine().trim());
+            p = new ProdusAlimentar(cod, nume, pret, stoc, cat, exp);
+        } else {
+            System.out.print("  Garantie (luni): ");
+            int gar = Integer.parseInt(sc.nextLine().trim());
+            p = new ProdusNealimentar(cod, nume, pret, stoc, cat, gar);
+        }
+        ps.adauga(p);
+        System.out.println("  [OK] Produs adaugat: " + p);
+        System.out.println("  TVA produs: " + String.format("%.2f", p.calculeazaTaxa()) + " RON");
+    }
+
+    private static void meniu3AdaugaFurnizor(Scanner sc, FurnizorService fs) {
+        System.out.print("  Nume reprezentant: ");
+        String nume = sc.nextLine().trim();
+        System.out.print("  CNP reprezentant: ");
+        String cnp = sc.nextLine().trim();
+        System.out.print("  Nume companie: ");
+        String companie = sc.nextLine().trim();
+        System.out.print("  CUI (ex. RO12345678): ");
+        String cui = sc.nextLine().trim();
+        fs.adauga(new Furnizor(nume, cnp, companie, cui));
+        System.out.println("  [OK] Furnizor inregistrat: " + fs.cautaDupaCui(cui));
+        System.out.println("  Total furnizori in sistem: " + fs.listeazaToate().size());
+    }
+
+    private static void meniu4AdaugaClient(Scanner sc, ClientService cls) {
+        System.out.print("  Nume client: ");
+        String nume = sc.nextLine().trim();
+        System.out.print("  CNP: ");
+        String cnp = sc.nextLine().trim();
+        System.out.print("  Email: ");
+        String email = sc.nextLine().trim();
+        System.out.print("  Telefon: ");
+        String tel = sc.nextLine().trim();
+        cls.adauga(new Client(nume, cnp, email, tel));
+        System.out.println("  [OK] Client inregistrat: " + cls.cautaDupaCnp(cnp));
+        System.out.println("  Total clienti in sistem: " + cls.listeazaToate().size());
+    }
+
+    private static void meniu5Aprovizioneaza(Scanner sc, FurnizorService fs, ProdusService ps) {
+        System.out.println("  Furnizori disponibili:");
+        for (Furnizor f : fs.listeazaToate()) {
+            System.out.println("    - " + f.getNumeCompanie() + " | CUI: " + f.getCui());
+        }
+        System.out.print("  CUI furnizor: ");
+        String cui = sc.nextLine().trim();
+        System.out.println("  Produse disponibile:");
+        for (Produs p : ps.listeazaToate()) {
+            System.out.println("    - " + p.getCod() + " | " + p.getNume() + " | stoc actual: " + p.getStoc());
+        }
+        System.out.print("  Prefix cod produs (ex. ALIM): ");
+        String prefix = sc.nextLine().trim();
+        System.out.print("  Serial cod produs: ");
+        int serial = Integer.parseInt(sc.nextLine().trim());
+        System.out.print("  Cantitate: ");
+        int cant = Integer.parseInt(sc.nextLine().trim());
+        Produs produs = ps.cautaDupaCod(new CodProdus(prefix, serial));
+        int stocInainte = produs.getStoc();
+        Aprovizionare ap = fs.aprovizioneaza(cui, produs, cant);
+        System.out.println("  [OK] " + ap);
+        System.out.println("  Stoc '" + produs.getNume() + "': " + stocInainte + " -> " + produs.getStoc());
+    }
+
+    private static void meniu6PlaseazaComanda(Scanner sc, ClientService cls, ComandaService oms) {
+        System.out.println("  Clienti disponibili:");
+        for (Client c : cls.listeazaToate()) {
+            System.out.println("    - " + c.getNume() + " | CNP: " + c.getCnp());
+        }
+        System.out.print("  CNP client: ");
+        String cnp = sc.nextLine().trim();
+        Client client = cls.cautaDupaCnp(cnp);
+
+        Map<CodProdus, Integer> cos = new LinkedHashMap<>();
+        System.out.println("  Adauga produse (prefix serial cantitate, ex: ALIM 1 3). Scrie 'gata' cand termini.");
+        while (true) {
+            System.out.print("  > ");
+            String input = sc.nextLine().trim();
+            if (input.equalsIgnoreCase("gata")) break;
+            String[] parts = input.split("\\s+");
+            if (parts.length != 3) {
+                System.out.println("  [!] Format gresit. Exemplu: ALIM 1 3");
+                continue;
+            }
+            try {
+                CodProdus cod = new CodProdus(parts[0], Integer.parseInt(parts[1]));
+                int cantitate = Integer.parseInt(parts[2]);
+                cos.put(cod, cantitate);
+                System.out.println("  Adaugat: " + cod + " x" + cantitate);
+            } catch (IllegalArgumentException e) {
+                System.out.println("  [!] Date invalide: " + e.getMessage());
+            }
+        }
+        Comanda comanda = oms.plaseazaComanda(client, cos);
+        System.out.println("  [OK] Comanda plasata cu succes!");
+        System.out.println("  " + comanda);
+        System.out.println("  Total de plata: " + String.format("%.2f", comanda.getTotal()) + " RON");
+    }
+
+    private static void meniu7CautaDupaCategorie(Scanner sc, ProdusService ps) {
+        System.out.print("  Nume categorie: ");
+        String catNume = sc.nextLine().trim();
+        List<Produs> rezultat = ps.dupaCategorie(catNume);
+        if (rezultat.isEmpty()) {
+            System.out.println("  Niciun produs gasit in categoria '" + catNume + "'.");
+        } else {
+            System.out.println("  Produse din '" + catNume + "' (" + rezultat.size() + "):");
+            for (Produs p : rezultat) {
+                System.out.println("    - " + p);
+            }
+        }
+    }
+
+    private static void meniu8CautaDupaCod(Scanner sc, ProdusService ps) {
+        System.out.print("  Prefix cod (ex. ALIM): ");
+        String prefix = sc.nextLine().trim();
+        System.out.print("  Serial: ");
+        int serial = Integer.parseInt(sc.nextLine().trim());
+        Produs p = ps.cautaDupaCod(new CodProdus(prefix, serial));
+        System.out.println("  [OK] Produs gasit: " + p);
+        System.out.println("  TVA: " + String.format("%.2f", p.calculeazaTaxa()) + " RON");
+    }
+
+    private static void meniu9TopVandute(ComandaService oms) {
+        Map<Produs, Integer> top = oms.topProduseVandute();
+        if (top.isEmpty()) {
+            System.out.println("  Nu exista comenzi inca.");
+            return;
+        }
+        System.out.println("  Top produse vandute:");
+        int rang = 1;
+        for (Map.Entry<Produs, Integer> e : top.entrySet()) {
+            System.out.println("  " + rang + ". " + e.getKey().getNume()
+                    + " [" + e.getKey().getCod() + "]"
+                    + " - " + e.getValue() + " buc. vandute");
+            rang++;
+        }
+    }
+
+    private static void meniu10IstoricClient(Scanner sc, ClientService cls, ComandaService oms) {
+        System.out.println("  Clienti disponibili:");
+        for (Client c : cls.listeazaToate()) {
+            System.out.println("    - " + c.getNume() + " | CNP: " + c.getCnp());
+        }
+        System.out.print("  CNP client: ");
+        String cnp = sc.nextLine().trim();
+        Client client = cls.cautaDupaCnp(cnp);
+        List<Comanda> istoric = oms.istoricClient(cnp);
+        System.out.println("  Istoric comenzi pentru " + client.getNume() + ":");
+        if (istoric.isEmpty()) {
+            System.out.println("    (nicio comanda)");
+        } else {
+            double totalGeneral = 0;
+            for (Comanda c : istoric) {
+                System.out.println("    Comanda #" + c.getId() + " | " + c.getData()
+                        + " | Total: " + String.format("%.2f", c.getTotal()) + " RON");
+                for (var l : c.getLinii()) {
+                    System.out.println("      * " + l.getProdus().getNume()
+                            + " x" + l.getCantitate()
+                            + " @ " + l.getPretUnitar() + " RON");
+                }
+                totalGeneral += c.getTotal();
+            }
+            System.out.println("  Total cheltuit: " + String.format("%.2f", totalGeneral) + " RON");
         }
     }
 
