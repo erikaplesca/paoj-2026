@@ -3,12 +3,8 @@ package com.pao.laboratory11.exercise2;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class Main {
     public static void main(String[] args) {
@@ -35,6 +31,7 @@ public class Main {
                 return;
             }
 
+            // Separarea token-urilor pe spatii multiple, conform cerintei
             String[] p = line.split("\\s+");
             txs.add(new Tx(
                     Integer.parseInt(p[0]),
@@ -58,59 +55,51 @@ public class Main {
             switch (op) {
                 case "REPORT_MONTH": {
                     String month = p[1];
-                    double total = 0.0;
-                    int count = 0;
-                    for (Tx tx : txs) {
-                        if (tx.date.startsWith(month)) {
-                            total += tx.amount;
-                            count++;
-                        }
-                    }
-                    System.out.printf(Locale.US, "MONTH %s total=%.2f count=%d%n", month, total, count);
+                    // Folosim Stream API si DoubleSummaryStatistics pentru a extrage atat suma cat si count-ul dintr-o singura trecere
+                    DoubleSummaryStatistics stats = txs.stream()
+                            .filter(tx -> tx.date.startsWith(month))
+                            .collect(Collectors.summarizingDouble(tx -> tx.amount));
+
+                    System.out.printf(Locale.US, "MONTH %s total=%.2f count=%d%n",
+                            month, stats.getSum(), stats.getCount());
                     break;
                 }
 
                 case "REPORT_ACCOUNT": {
                     String account = p[1];
-                    double total = 0.0;
-                    int count = 0;
-                    for (Tx tx : txs) {
-                        if (tx.account.equals(account)) {
-                            total += tx.amount;
-                            count++;
-                        }
-                    }
-                    System.out.printf(Locale.US, "ACCOUNT %s total=%.2f count=%d%n", account, total, count);
+                    // Aceeasi logica folosind Stream API pentru conturi
+                    DoubleSummaryStatistics stats = txs.stream()
+                            .filter(tx -> tx.account.equals(account))
+                            .collect(Collectors.summarizingDouble(tx -> tx.amount));
+
+                    System.out.printf(Locale.US, "ACCOUNT %s total=%.2f count=%d%n",
+                            account, stats.getSum(), stats.getCount());
                     break;
                 }
 
                 case "TOP_CHANNELS": {
                     int k = Integer.parseInt(p[1]);
-                    Map<String, Integer> counts = new HashMap<>();
-                    for (Tx tx : txs) {
-                        counts.put(tx.channel, counts.getOrDefault(tx.channel, 0) + 1);
-                    }
 
-                    List<Map.Entry<String, Integer>> entries = new ArrayList<>(counts.entrySet());
-                    entries.sort(Comparator
-                            .comparingInt((Map.Entry<String, Integer> e) -> e.getValue()).reversed()
-                            .thenComparing(Map.Entry::getKey));
-
-                    if (entries.isEmpty()) {
+                    if (txs.isEmpty()) {
                         System.out.println("NONE");
                         break;
                     }
 
-                    int limit = Math.min(k, entries.size());
-                    for (int idx = 0; idx < limit; idx++) {
-                        Map.Entry<String, Integer> e = entries.get(idx);
-                        System.out.println(e.getKey() + " " + e.getValue());
-                    }
+                    // 1. Grupăm și numărăm aparițiile fiecărui canal
+                    Map<String, Long> counts = txs.stream()
+                            .collect(Collectors.groupingBy(tx -> tx.channel, Collectors.counting()));
+
+                    // 2. Sortăm stream-ul conform regulilor: count descendent, apoi alfabetic ascendent
+                    counts.entrySet().stream()
+                            .sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder())
+                                    .thenComparing(Map.Entry.comparingByKey()))
+                            .limit(k)
+                            .forEach(e -> System.out.println(e.getKey() + " " + e.getValue()));
                     break;
                 }
 
                 default:
-                    // Ignore unknown commands.
+                    // Ignoram comenzile necunoscute
                     break;
             }
         }
@@ -126,6 +115,7 @@ public class Main {
         return null;
     }
 
+    // Am pastrat clasa interna exact cum era definita, avand campurile specificate (id, amount, date, country, channel, account)
     private static final class Tx {
         private final int id;
         private final double amount;

@@ -1,24 +1,15 @@
 package com.pao.laboratory11.exercise1;
 
-// Imports for command parsing and in-memory ranking/lookup structures.
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 public class Main {
+    // Constante obligatorii pentru scoruri si praguri
     private static final Set<String> HIGH_RISK_COUNTRIES =
             new HashSet<>(Arrays.asList("RU", "NG", "IR", "KP", "SY"));
 
     private static final Map<String, Integer> CHANNEL_SCORE = new HashMap<>();
-
     static {
         CHANNEL_SCORE.put("WEB", 15);
         CHANNEL_SCORE.put("APP", 10);
@@ -27,136 +18,98 @@ public class Main {
         CHANNEL_SCORE.put("ATM", 0);
     }
 
+    private static final int FLAG_THRESHOLD = 60;
+
+    // Partea A - Definirea regulilor simple ca Predicate
+    public static final Predicate<Transaction> amountOverThreshold = tx -> tx.amount >= 1000;
+    public static final Predicate<Transaction> countryInRisk = tx -> HIGH_RISK_COUNTRIES.contains(tx.country);
+    public static final Predicate<Transaction> channelSuspicious = tx ->
+            Arrays.asList("WEB", "APP", "CRYPTO").contains(tx.channel);
+
+    // Partea C - Comparatorul determinist
     private static final Comparator<Transaction> BY_RISK_DESC_THEN_ID_ASC =
-            Comparator.comparingInt(Main::riskScore).reversed().thenComparingInt(t -> t.id);
+            Comparator.comparingInt(Main::riskScore)
+                    .reversed()
+                    .thenComparingInt(t -> t.id);
 
     public static void main(String[] args) {
-        try {
-            run();
-        } catch (IOException e) {
-            // Keep deterministic output for checker-based tests.
-            System.out.println("ERR IO");
-        }
-    }
+        Scanner scanner = new Scanner(System.in);
+        scanner.useLocale(Locale.US);
 
-    private static void run() throws IOException {
-        // Read dataset and then execute Q commands over the in-memory model.
-        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-        String first = readNonEmptyLine(br);
-        if (first == null) {
-            return;
-        }
+        if (!scanner.hasNextInt()) return;
 
-        int n = Integer.parseInt(first);
+        int n = scanner.nextInt();
         Map<Integer, Transaction> byId = new HashMap<>();
         List<Transaction> all = new ArrayList<>();
 
+        // Citirea tranzactiilor
         for (int i = 0; i < n; i++) {
-            String line = readNonEmptyLine(br);
-            if (line == null) {
-                return;
-            }
+            int id = scanner.nextInt();
+            double amount = scanner.nextDouble();
+            String date = scanner.next();
+            String country = scanner.next().toUpperCase();
+            String channel = scanner.next().toUpperCase();
 
-            String[] tok = line.split("\\s+");
-            if (tok.length < 5) {
-                continue;
-            }
-
-            Transaction tx = new Transaction(
-                    Integer.parseInt(tok[0]),
-                    Double.parseDouble(tok[1]),
-                    tok[2],
-                    tok[3].toUpperCase(),
-                    tok[4].toUpperCase());
-
-            byId.put(tx.id, tx);
+            Transaction tx = new Transaction(id, amount, date, country, channel);
+            byId.put(id, tx);
             all.add(tx);
         }
 
-        String qLine = readNonEmptyLine(br);
-        if (qLine == null) {
-            return;
-        }
-        int q = Integer.parseInt(qLine);
+        if (!scanner.hasNextInt()) return;
+        int q = scanner.nextInt();
 
+        // Procesarea comenzilor
         for (int i = 0; i < q; i++) {
-            String cmdLine = readNonEmptyLine(br);
-            if (cmdLine == null) {
-                return;
-            }
+            String cmd = scanner.next().toUpperCase();
 
-            String[] cmd = cmdLine.split("\\s+");
-            String op = cmd[0].toUpperCase();
-
-            switch (op) {
-                case "CHECK":
-                    if (cmd.length < 2) {
-                        System.out.println("ERR BAD_COMMAND");
-                        break;
-                    }
-                    int id = Integer.parseInt(cmd[1]);
+            switch (cmd) {
+                case "CHECK": {
+                    int id = scanner.nextInt();
                     Transaction tx = byId.get(id);
                     if (tx == null) {
                         System.out.println("CHECK " + id + " => NOT_FOUND");
                     } else {
-                        int score = riskScore(tx);
-                        System.out.println("CHECK " + id + " => " + verdict(score) + " score=" + score);
+                        System.out.println("CHECK " + id + " => " + formatRiskLine(tx, false));
                     }
                     break;
+                }
+                case "LIST_FLAGGED": {
+                    List<Transaction> flagged = all.stream()
+                            .filter(tx -> riskScore(tx) >= FLAG_THRESHOLD)
+                            .sorted(BY_RISK_DESC_THEN_ID_ASC)
+                            .collect(Collectors.toList());
 
-                case "LIST_FLAGGED":
-                    // Build flagged view and keep deterministic ordering for tests.
-                    List<Transaction> flagged = new ArrayList<>();
-                    for (Transaction t : all) {
-                        if (isFlagged(t)) {
-                            flagged.add(t);
-                        }
-                    }
-                    flagged.sort(BY_RISK_DESC_THEN_ID_ASC);
                     if (flagged.isEmpty()) {
                         System.out.println("NONE");
                     } else {
-                        for (Transaction t : flagged) {
-                            System.out.println(formatRiskLine(t));
-                        }
+                        flagged.forEach(tx -> System.out.println(formatRiskLine(tx, true)));
                     }
                     break;
-
-                case "TOP_RISK":
-                    if (cmd.length < 2) {
-                        System.out.println("ERR BAD_COMMAND");
-                        break;
-                    }
-                    int k = Integer.parseInt(cmd[1]);
-                    List<Transaction> ranked = new ArrayList<>(all);
-                    ranked.sort(BY_RISK_DESC_THEN_ID_ASC);
-                    int limit = Math.max(0, Math.min(k, ranked.size()));
-                    for (int idx = 0; idx < limit; idx++) {
-                        System.out.println(formatRiskLine(ranked.get(idx)));
-                    }
+                }
+                case "TOP_RISK": {
+                    int k = scanner.nextInt();
+                    all.stream()
+                            .sorted(BY_RISK_DESC_THEN_ID_ASC)
+                            .limit(k)
+                            .forEach(tx -> System.out.println(formatRiskLine(tx, true)));
                     break;
-
-                default:
+                }
+                default: {
                     System.out.println("ERR UNKNOWN_COMMAND");
+                    // Consumă restul liniei pentru a nu strica citirile viitoare
+                    if (scanner.hasNextLine()) scanner.nextLine();
                     break;
+                }
             }
         }
+        scanner.close();
     }
 
-    private static String readNonEmptyLine(BufferedReader br) throws IOException {
-        String line;
-        while ((line = br.readLine()) != null) {
-            if (!line.trim().isEmpty()) {
-                return line.trim();
-            }
-        }
-        return null;
-    }
-
+    // Calcularea scorului de risc
     private static int riskScore(Transaction tx) {
-        // Composite risk scoring used by CHECK, LIST_FLAGGED and TOP_RISK.
         int score = 0;
 
+        // Reguli pentru suma (mutually exclusive down to 100)
         if (tx.amount >= 5000.0) {
             score += 70;
         } else if (tx.amount >= 1000.0) {
@@ -165,39 +118,45 @@ public class Main {
             score += 20;
         }
 
+        // Regula independenta pentru sume mici
         if (tx.amount <= 100.0) {
             score += 5;
         }
 
-        if (HIGH_RISK_COUNTRIES.contains(tx.country)) {
+        // Regula pentru tara
+        if (countryInRisk.test(tx)) {
             score += 25;
         }
 
+        // Regula pentru canal
         score += CHANNEL_SCORE.getOrDefault(tx.channel, 0);
+
         return score;
     }
 
-    private static boolean isFlagged(Transaction tx) {
-        return riskScore(tx) >= 60;
-    }
-
     private static String verdict(int score) {
-        return score >= 60 ? "FLAG" : "ALLOW";
+        return score >= FLAG_THRESHOLD ? "FLAG" : "ALLOW";
     }
 
-    private static String formatRiskLine(Transaction tx) {
+    private static String formatRiskLine(Transaction tx, boolean includeIdBracket) {
         int score = riskScore(tx);
-        return "[" + tx.id + "] " + verdict(score) + " score=" + score;
+        String v = verdict(score);
+        if (includeIdBracket) {
+            return "[" + tx.id + "] " + v + " score=" + score;
+        } else {
+            return v + " score=" + score;
+        }
     }
 
+    // Clasa interna pentru tranzactii
     private static class Transaction {
-        private final int id;
-        private final double amount;
-        private final String date;
-        private final String country;
-        private final String channel;
+        final int id;
+        final double amount;
+        final String date;
+        final String country;
+        final String channel;
 
-        private Transaction(int id, double amount, String date, String country, String channel) {
+        Transaction(int id, double amount, String date, String country, String channel) {
             this.id = id;
             this.amount = amount;
             this.date = date;
