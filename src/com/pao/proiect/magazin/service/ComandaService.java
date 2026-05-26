@@ -65,6 +65,7 @@ public class ComandaService {
         Comanda comanda = new Comanda(nextId++, client, LocalDateTime.now(), linii);
         toate.add(comanda);
         dupaCnpClient.computeIfAbsent(client.getCnp(), k -> new ArrayList<>()).add(comanda);
+        AuditService.getInstance().logAction("plaseaza_comanda");
         return comanda;
     }
 
@@ -90,6 +91,7 @@ public class ComandaService {
 
     public List<Comanda> istoricClient(String cnp) {
         Objects.requireNonNull(cnp, "CNP-ul nu poate fi null.");
+        AuditService.getInstance().logAction("istoric_comenzi_client");
         return new ArrayList<>(dupaCnpClient.getOrDefault(cnp, new ArrayList<>()));
     }
 
@@ -108,6 +110,7 @@ public class ComandaService {
         for (Map.Entry<Produs, Integer> e : intrari) {
             sortat.put(e.getKey(), e.getValue());
         }
+        AuditService.getInstance().logAction("top_produse_vandute");
         return sortat;
     }
 }

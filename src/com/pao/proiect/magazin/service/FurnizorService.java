@@ -36,6 +36,7 @@ public class FurnizorService {
             throw new IllegalStateException("Exista deja un furnizor cu CUI-ul: " + furnizor.getCui());
         }
         dupaCui.put(furnizor.getCui(), furnizor);
+        AuditService.getInstance().logAction("inregistreaza_furnizor");
     }
 
     public void sterge(String cui) {
@@ -63,9 +64,18 @@ public class FurnizorService {
         Furnizor furnizor = cautaDupaCui(cuiFurnizor);
         Objects.requireNonNull(produs, "Produsul nu poate fi null.");
         if (cantitate <= 0) throw new IllegalArgumentException("Cantitatea trebuie sa fie pozitiva.");
+
+        // 1. Modificăm stocul obiectului în memorie
         produs.cresteStoc(cantitate);
+
+        // 2. IMPORTANT: Executăm UPDATE în DB pentru stocul modificat, nu INSERT
+        ProdusService.getInstance().actualizeaza(produs);
+
+        // 3. Înregistrăm aprovizionarea în coada istorică din memorie
         Aprovizionare ap = new Aprovizionare(nextAprovizionareId++, furnizor, produs, cantitate, LocalDateTime.now());
         coadaAprovizionari.offer(ap);
+
+        AuditService.getInstance().logAction("reaprovizioneaza_stoc");
         return ap;
     }
 

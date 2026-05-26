@@ -1,5 +1,7 @@
 package com.pao.proiect.magazin;
-
+import java.io.InputStream;
+import java.sql.Connection;
+import java.sql.Statement;
 import com.pao.proiect.magazin.exception.EntitateInexistentaException;
 import com.pao.proiect.magazin.exception.StocInsuficientException;
 import com.pao.proiect.magazin.model.Angajat;
@@ -13,11 +15,17 @@ import com.pao.proiect.magazin.model.Manager;
 import com.pao.proiect.magazin.model.Produs;
 import com.pao.proiect.magazin.model.ProdusAlimentar;
 import com.pao.proiect.magazin.model.ProdusNealimentar;
+import com.pao.proiect.magazin.repository.CategorieRepository;
+import com.pao.proiect.magazin.repository.ClientRepository;
+import com.pao.proiect.magazin.repository.ComandaRepository;
+import com.pao.proiect.magazin.repository.ProdusRepository;
+import com.pao.proiect.magazin.service.AuditService;
 import com.pao.proiect.magazin.service.CategorieService;
 import com.pao.proiect.magazin.service.ClientService;
 import com.pao.proiect.magazin.service.ComandaService;
 import com.pao.proiect.magazin.service.FurnizorService;
 import com.pao.proiect.magazin.service.ProdusService;
+import com.pao.proiect.magazin.util.DatabaseConnection;
 
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -29,6 +37,8 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) {
+        DatabaseConnection.getInstance().initSchema();
+
         CategorieService categorieService = CategorieService.getInstance();
         ProdusService produsService = ProdusService.getInstance();
         FurnizorService furnizorService = FurnizorService.getInstance();
@@ -54,9 +64,10 @@ public class Main {
 
         sectiuneBonusStocSubPrag(produsService);
 
+        demoJDBC(categorieService, produsService, clientService, comandaService);
+
         runMeniu(categorieService, produsService, furnizorService, clientService, comandaService);
     }
-
     private static void afiseazaTitlu(int numar, String titlu) {
         System.out.println();
         System.out.println("=== Actiunea " + numar + ": " + titlu + " ===");
@@ -208,8 +219,8 @@ public class Main {
     // -----------------------------------------------------------------------
 
     private static void runMeniu(CategorieService cs, ProdusService ps,
-                                  FurnizorService fs, ClientService cls,
-                                  ComandaService oms) {
+                                 FurnizorService fs, ClientService cls,
+                                 ComandaService oms) {
         Scanner sc = new Scanner(System.in);
         System.out.println("\n \n \n ");
         System.out.println("  MENIU - Gestiune Magazin");
@@ -460,6 +471,115 @@ public class Main {
                 totalGeneral += c.getTotal();
             }
             System.out.println("  Total cheltuit: " + String.format("%.2f", totalGeneral) + " RON");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Demo JDBC: repository-uri, tranzactii, JOIN-uri
+    // -----------------------------------------------------------------------
+
+    private static void demoJDBC(CategorieService cs, ProdusService ps,
+                                 ClientService cls, ComandaService oms) {
+        System.out.println();
+        System.out.println("=== Demo Etapa II: Persistenta JDBC ===");
+        System.out.println("(Foloseste SQLite - baza de date paoj_proiect.db, creata automat)");
+        System.out.println();
+
+        try {
+            CategorieRepository catRepo = new CategorieRepository();
+            ClientRepository clientRepo = new ClientRepository();
+            ProdusRepository produsRepo = new ProdusRepository();
+            ComandaRepository comandaRepo = new ComandaRepository();
+
+            // --- Salvare date in DB ---
+            System.out.println("  [DB] Salvare categorii...");
+            for (Categorie c : cs.listeazaToate()) {
+                catRepo.save(c);
+            }
+
+            System.out.println("  [DB] Salvare produse...");
+            for (Produs p : ps.listeazaToate()) {
+                produsRepo.save(p);
+            }
+
+            System.out.println("  [DB] Salvare clienti...");
+            for (Client c : cls.listeazaToate()) {
+                clientRepo.save(c);
+            }
+
+            System.out.println("  [DB] Salvare comenzi (cu tranzactii JDBC)...");
+            for (Comanda c : oms.listeazaToate()) {
+                comandaRepo.save(c);
+            }
+
+            // --- Citire din DB ---
+            System.out.println();
+            System.out.println("  [DB] Categorii din baza de date:");
+            for (Categorie c : catRepo.findAll()) {
+                System.out.println("    - " + c);
+            }
+
+            System.out.println("  [DB] Clienti din baza de date:");
+            for (Client c : clientRepo.findAll()) {
+                System.out.println("    - " + c);
+            }
+
+            System.out.println("  [DB] Produse din baza de date (JOIN cu categorii):");
+            for (Produs p : produsRepo.findAll()) {
+                System.out.println("    - " + p);
+            }
+
+            // --- JOIN 1: comenzi cu client ---
+            System.out.println();
+            System.out.println("  [DB] Comenzi cu date client (JOIN 1):");
+            for (Comanda c : comandaRepo.findAll()) {
+                System.out.printf("    - Comanda #%d | Client: %s | Total: %.2f RON%n",
+                        c.getId(), c.getClient().getNume(), c.getTotal());
+            }
+
+            // --- JOIN 2: top produse vandute cu categorie ---
+            System.out.println();
+            System.out.println("  [DB] Top produse vandute cu categorie (JOIN 2):");
+            int rang = 1;
+            for (String[] row : comandaRepo.findTopProduseVanduteCuCategorie()) {
+                System.out.printf("    %d. %s [%s] — %s buc.%n", rang++, row[0], row[1], row[2]);
+            }
+
+            // --- JOIN 3: linii comanda cu detalii ---
+            System.out.println();
+            System.out.println("  [DB] Linii comanda cu detalii produs (JOIN 3):");
+            for (String[] row : comandaRepo.findLiniiCuDetalii()) {
+                System.out.printf("    Comanda #%s | %s [%s] x%s @ %s RON%n",
+                        row[0], row[2], row[3], row[4], row[5]);
+            }
+
+            // --- findById demo ---
+            System.out.println();
+            catRepo.findById("Lactate").ifPresentOrElse(
+                    c -> System.out.println("  [DB] findById('Lactate'): " + c),
+                    () -> System.out.println("  [DB] Categoria 'Lactate' nu a fost gasita in DB."));
+
+            System.out.println();
+            System.out.println("  [DB] Demo JDBC finalizat cu succes!");
+
+        } catch (RuntimeException e) {
+            System.out.println("  [DB] Conexiunea la baza de date nu este disponibila: " + e.getMessage());
+            System.out.println("  [DB] Verifica driverul SQLite si schema.sql.");
+            System.out.println("  [DB] Restul demonstratiei (in-memory) a functionat corect.");
+        }
+
+        // --- Afisare audit.csv ---
+        System.out.println();
+        System.out.println("=== Continut audit.csv ===");
+        try {
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader("audit.csv"));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("  " + line);
+            }
+            reader.close();
+        } catch (java.io.IOException e) {
+            System.out.println("  (fisierul audit.csv nu a putut fi citit: " + e.getMessage() + ")");
         }
     }
 

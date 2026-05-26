@@ -1,0 +1,8 @@
+--- expected
++++ actual
+@@ -2,4 +2,4 @@
+ 
+ Statistici:
+ GIFT: suma = 0.00 lei, numar = 1
+-Total platit: 0.00 lei
++Total platit: 0,00 lei

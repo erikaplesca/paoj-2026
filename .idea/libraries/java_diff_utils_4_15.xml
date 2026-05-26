@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="java-diff-utils-4.15">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/java-diff-utils-4.15.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
